@@ -6,7 +6,7 @@ from models import Menu
 
 class MenuRepository:
     
-    def __get_mssql_connection(self,server, database, username, password):
+    def get_mssql_connection(self,server, database, username, password):
         connection_string = (
             f"DRIVER={{ODBC Driver 17 for SQL Server}};"
             f"SERVER={server};"
@@ -16,7 +16,7 @@ class MenuRepository:
         )
         return pyodbc.connect(connection_string)
 
-    def __fetch_menu_data(self,connection):
+    def fetch_menu_data(self,connection):
         query = """
         SELECT 
             Id, ParentId, Name, CreatedDate, UpdatedDate, IsActive, Position, Description, 

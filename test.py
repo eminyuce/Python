@@ -5,6 +5,7 @@ from number_service import NumberService
 from string_service import StringService
 from model_service import ModelService
 from menu_repository import MenuRepository
+from data_structure import DataStructure
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -13,11 +14,12 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 # Controller layer
 class MainController:
-    def __init__(self, number_service, string_service,model_service,menu_repository):
+    def __init__(self, number_service, string_service,model_service,menu_repository,data_structure):
         self.number_service = number_service
         self.string_service = string_service
         self.model_service=model_service
         self.menu_repository=menu_repository
+        self.data_structure=data_structure
 
     def run(self):
         try:
@@ -57,7 +59,7 @@ class MainController:
             self.model_service.process_persons()
 
             self.menu_repository.connect_and_process()
-            
+            self.data_structure.print_data_structure()
         except ValueError as e:
             print(f"Error: {e}")
             logging.error(f"ValueError: {e}")
@@ -72,5 +74,6 @@ if __name__ == "__main__":
     number_service = NumberService()
     string_service = StringService()
     menu_repository = MenuRepository()
-    controller = MainController(number_service, string_service,model_service,menu_repository)
+    data_structure = DataStructure()
+    controller = MainController(number_service, string_service,model_service,menu_repository,data_structure)
     controller.run()
