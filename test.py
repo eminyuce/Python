@@ -53,7 +53,7 @@ class MainController:
                 print(result)
             logging.info(f"Processed list of numbers: {numbers}")
 
-            self.model_service.filter_and_sort_models()
+            self.model_service.process_persons()
         except ValueError as e:
             print(f"Error: {e}")
             logging.error(f"ValueError: {e}")
