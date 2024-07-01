@@ -4,7 +4,7 @@ import json
 from number_service import NumberService
 from string_service import StringService
 from model_service import ModelService
-
+from menu_repository import MenuRepository
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -13,10 +13,11 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 # Controller layer
 class MainController:
-    def __init__(self, number_service, string_service,model_service):
+    def __init__(self, number_service, string_service,model_service,menu_repository):
         self.number_service = number_service
         self.string_service = string_service
-        self.model_service=model_service;
+        self.model_service=model_service
+        self.menu_repository=menu_repository
 
     def run(self):
         try:
@@ -54,6 +55,9 @@ class MainController:
             logging.info(f"Processed list of numbers: {numbers}")
 
             self.model_service.process_persons()
+
+            self.menu_repository.connect_and_process()
+            
         except ValueError as e:
             print(f"Error: {e}")
             logging.error(f"ValueError: {e}")
@@ -67,5 +71,6 @@ if __name__ == "__main__":
     model_service = ModelService(file_path)
     number_service = NumberService()
     string_service = StringService()
-    controller = MainController(number_service, string_service,model_service)
+    menu_repository = MenuRepository()
+    controller = MainController(number_service, string_service,model_service,menu_repository)
     controller.run()
