@@ -4,10 +4,13 @@ import json
 import logging
 from io import StringIO
 
-from model_service import ModelService
+from main_controller import MainController
 from number_service import NumberService
 from string_service import StringService
-from main_controller import MainController
+from json_service import JsonService
+from menu_sql_repository import MenuSqlRepository
+from data_structure import DataStructure
+
 
 # Configure logging to capture logs for testing
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -53,7 +56,7 @@ class TestStringService(unittest.TestCase):
 class TestModelService(unittest.TestCase):
     def setUp(self):
         self.file_path = 'models.json'
-        self.model_service = ModelService(self.file_path)
+        self.json_service = JsonService(self.file_path)
         self.mock_json_data = '''
         [
             {"name": "Alice", "age": 65},
@@ -67,7 +70,7 @@ class TestModelService(unittest.TestCase):
     @patch('builtins.open', new_callable=mock_open, read_data='[]')
     def test_file_not_found(self, mock_file):
         with patch('json.load', side_effect=FileNotFoundError):
-            result = self.model_service.filter_and_sort_models()
+            result = self.json_service.filter_and_sort_models()
             self.assertEqual(result, [])
             self.assertLogs(level='ERROR')
 
@@ -97,12 +100,14 @@ class TestMainController(unittest.TestCase):
     @patch('builtins.input', side_effect=["4", "hello", "1,2,abc"])
     @patch('builtins.print')
     def test_run(self, mock_print, mock_input):
+
+        file_path = 'models.json'  # Replace with your JSON file path
+        json_service = JsonService(file_path)
         number_service = NumberService()
         string_service = StringService()
-        file_path = 'models.json'
-        model_service = ModelService(file_path)
-        
-        controller = MainController(number_service, string_service, model_service)
+        menu_sql_repository = MenuSqlRepository()
+        data_structure = DataStructure()
+        controller = MainController(number_service, string_service,json_service,menu_sql_repository,data_structure)
 
         with self.assertRaises(ValueError):
             controller.run()

@@ -4,7 +4,7 @@ from models import Person
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-class ModelService:
+class JsonService:
     def __init__(self, file_path):
         self.file_path = file_path
 

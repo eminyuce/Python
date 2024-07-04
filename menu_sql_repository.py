@@ -4,7 +4,7 @@ import logging
 from datetime import datetime
 from models import Menu
 
-class MenuRepository:
+class MenuSqlRepository:
     
     def get_mssql_connection(self,server, database, username, password):
         connection_string = (
