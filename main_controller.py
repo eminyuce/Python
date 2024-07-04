@@ -1,11 +1,5 @@
 import logging
 import json
-# Service layer
-from number_service import NumberService
-from string_service import StringService
-from json_service import JsonService
-from menu_sql_repository import MenuSqlRepository
-from data_structure import DataStructure
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
