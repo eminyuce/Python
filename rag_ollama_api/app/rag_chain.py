@@ -10,32 +10,48 @@ from langchain.embeddings import HuggingFaceEmbeddings
 import os
 
 def build_vector_store(docs, embedding_model, index_path="faiss_index"):
+    print("Starting to build vector store...")
     index_file = os.path.join(index_path, "index.faiss")
     
     if not os.path.exists(index_file):
+        print(f"FAISS index file not found at {index_file}. Will build new index.")
         if not docs:
             raise ValueError("No documents found to build vector store.")
 
         if not os.path.exists(index_path):
+            print(f"Creating index directory at {index_path}")
             os.makedirs(index_path)
 
         splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
+        print("Splitting documents into chunks...")
         chunks = splitter.split_documents(docs)
+        print(f"Split into {len(chunks)} chunks.")
 
         if not chunks:
             raise ValueError("Text splitter produced no chunks. Check your documents.")
 
+        print("Starting embedding of chunks (this may take a while)...")
         vectorstore = FAISS.from_documents(chunks, embedding_model)
+        print("Vector store built successfully!")
+
+        print(f"Saving vector store locally at {index_path} ...")
         vectorstore.save_local(index_path)
+        print("Vector store saved successfully.")
     else:
+        print(f"FAISS index file found at {index_file}. Loading existing index...")
         vectorstore = FAISS.load_local(index_path, embedding_model, allow_dangerous_deserialization=True)
+        print("Vector store loaded successfully.")
 
     return vectorstore
 
 
+
 def get_rag_chain():
     index_path = "faiss_index"  # your folder path
-    embedding_model = HuggingFaceEmbeddings()
+    embedding_model = HuggingFaceEmbeddings(
+            model_name="sentence-transformers/all-MiniLM-L6-v2",
+            model_kwargs={"device": "cuda"}
+        )
 
     # Check if FAISS index exists
     if os.path.exists(index_path) and os.path.exists(os.path.join(index_path, "index.faiss")):
