@@ -1,54 +1,145 @@
-from fastapi import FastAPI, Query
-from pydantic import BaseModel
+from fastapi import FastAPI, Query, Depends
+from pydantic import BaseModel, Field
+from typing import List, Dict, Any, Optional
 from app.rag_chain import get_rag_chain
 from fastapi import HTTPException
+from app.settings import get_settings, Settings # Assuming app/settings.py
+from contextlib import asynccontextmanager # New import
+# You can also access settings directly for app-wide configuration outside of routes
+# For example, to configure logging based on settings
+import logging
 
 app = FastAPI()
 qa_chain = get_rag_chain()
+# --- Logging Configuration ---
+# Get settings at the module level to configure logging before app initialization
+# This ensures logging is set up correctly based on debug mode from the start.
+settings = get_settings()
 
+# Set up basic logging based on debug mode (you can expand this)
+if settings.debug:
+    logging.basicConfig(level=logging.DEBUG)
+else:
+    logging.basicConfig(level=logging.INFO)
+
+logger = logging.getLogger(__name__)
+logger.info(f"Starting {settings.app_name} in {settings.app_env} environment.")
+
+
+# --- Dependency for RAG Chain ---
+# Use a dependency for the RAG chain to manage its lifecycle better
+# and potentially allow for mocking in tests.
+# Using lru_cache for get_rag_chain_instance similar to get_settings()
+# ensures the chain is initialized only once.
+# Make sure get_rag_chain_instance in app/rag_chain.py returns the chain.
+# --- Lifespan Event Handler ---
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Context manager for managing application startup and shutdown events.
+    This replaces the deprecated @app.on_event("startup") and @app.on_event("shutdown").
+    """
+    logger.info("Application startup: Initializing RAG chain...")
+    # This call will populate the cache for get_rag_chain_instance()
+    # get_rag_chain_instance()
+    logger.info("RAG chain initialized successfully.")
+    yield # Application yields control here, runs, and then executes code after yield on shutdown
+    logger.info("Application shutdown: Performing cleanup (if any)...")
+    # Add any cleanup logic here if needed, e.g., closing connections.
+
+# --- FastAPI App Initialization ---
+app = FastAPI(
+    title=settings.app_name,
+    description="A Retrieval-Augmented Generation (RAG) Chatbot API.",
+    version="1.0.0",
+    debug=settings.debug,
+    lifespan=lifespan # Assign the lifespan context manager here
+)
+
+# --- Pydantic Models ---
 class Question(BaseModel):
-    query: str
+    """
+    Request model for the /ask endpoint.
+    """
+    query: str = Field(..., min_length=1, max_length=1000, description="The user's query for the chatbot.")
 
-from fastapi import HTTPException
+class AnswerResponse(BaseModel):
+    """
+    Response model for the /ask endpoint.
+    """
+    answer: str = Field(..., description="The generated answer from the RAG model.")
+    sources: List[str] = Field(default_factory=list, description="List of source document names that contributed to the answer.")
 
-    
-@app.post("/ask")
-def ask_question(q: Question):
-    print(f"[ask_question] Received query: '{q.query}'")
+# --- API Endpoints ---
+@app.post("/ask", response_model=AnswerResponse, summary="Ask the RAG Chatbot a question")
+async def ask_question(
+    q: Question
+) -> AnswerResponse:
+    """
+    Processes a user query using the RAG chain to generate an answer
+    and identify source documents.
 
-    # 1) Bad‐request if empty
-    if not q.query or q.query.strip() == "":
-        print("[ask_question] Empty query received, raising 400 Bad Request")
-        raise HTTPException(status_code=400, detail="Query cannot be empty")
+    - **query**: The question you want to ask the chatbot.
+    """
+    logger.debug(f"Received query: '{q.query}'")
 
-    # 2) Call the chain by passing a dict directly
-    print("[ask_question] Calling qa_chain with {'query': …}")
-    result = qa_chain({"query": q.query})
-    print(f"[ask_question] Raw result from qa_chain(): {result}")
+    try:
+        logger.debug("Calling RAG chain...")
+        # Await the chain if it's an asynchronous call (common for LLM operations)
+        # Ensure your get_rag_chain_instance provides an object with an .ainvoke method
+        result = qa_chain({"query": q.query})
 
-    # 3) Extract answer
-    answer_text = result.get("result", "")
-    print(f"[ask_question] Answer: {answer_text}")
+        logger.debug(f"Raw result from RAG chain: {result}")
 
-    # 4) Extract sources if they exist; otherwise return empty list
-    if "source_documents" in result and result["source_documents"]:
-        sources = [doc.metadata.get("source", "") for doc in result["source_documents"]]
-        print(f"[ask_question] Sources: {sources}")
-    else:
-        print("[ask_question] No source_documents returned; using empty list")
-        sources = []
+        answer_text = result.get("answer", "")
+        if not answer_text and "result" in result:
+             answer_text = result.get("result", "")
 
+        sources: List[str] = []
+        if "source_documents" in result and result["source_documents"]:
+            sources = [
+                doc.metadata.get("source", "Unknown Source")
+                for doc in result["source_documents"]
+                if hasattr(doc, 'metadata') and isinstance(doc.metadata, dict)
+            ]
+            logger.debug(f"Sources identified: {sources}")
+        else:
+            logger.debug("No source documents found in the chain's result.")
+
+        return AnswerResponse(answer=answer_text, sources=sources)
+
+    except Exception as e:
+        logger.error(f"Error processing query '{q.query}': {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail="An internal error occurred while processing your request. Please try again later."
+        )
+
+
+
+
+# Example using the settings in a FastAPI route
+@app.get("/")
+async def read_root(settings: Settings = Depends(get_settings)):
+    """
+    Returns basic application information based on current settings.
+    """
     return {
-        "answer": answer_text,
-        "sources": sources
+        "app_name": settings.app_name,
+        "environment": settings.app_env,
+        "debug_mode": settings.debug,
+        "host": settings.host,
+        "port": settings.port,
+        "ollama_model": settings.ollama_model,
+        "embedding_model": settings.embedding_model,
+        "faiss_index_directory": settings.faiss_index_dir,
+        "documents_directory": settings.docs_dir,
+        "message": f"Welcome to the {settings.app_name}!"
     }
 
 
-@app.get("/")
-def root():
-    return {"message": "RAG Chatbot API with Ollama is running!"}
-
+# --- Running the Application ---
 if __name__ == "__main__":
     import uvicorn
-    # Run server on port 8000
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    logger.info(f"Uvicorn starting server on {settings.host}:{settings.port}")
+    uvicorn.run(app, host=settings.host, port=settings.port)

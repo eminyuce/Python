@@ -7,9 +7,12 @@ from langchain.document_loaders import PyPDFLoader
 from app.pdf_loader import load_pdfs_from_folder
 from langchain_community.vectorstores import FAISS
 from langchain.embeddings import HuggingFaceEmbeddings
+from app.settings import get_settings, Settings # Assuming app/settings.py
 import os
 
-def build_vector_store(docs, embedding_model, index_path="faiss_index"):
+settings = get_settings()
+
+def build_vector_store(docs, embedding_model, index_path=settings.faiss_index_dir):
     print("Starting to build vector store...")
     index_file = os.path.join(index_path, "index.faiss")
     
@@ -49,7 +52,7 @@ def build_vector_store(docs, embedding_model, index_path="faiss_index"):
 def get_rag_chain():
     index_path = "faiss_index"  # your folder path
     embedding_model = HuggingFaceEmbeddings(
-            model_name="sentence-transformers/all-MiniLM-L6-v2",
+            model_name=settings.embedding_model, #  "sentence-transformers/all-MiniLM-L6-v2",
             model_kwargs={"device": "cuda"}
         )
 
@@ -59,7 +62,7 @@ def get_rag_chain():
         vectorstore = FAISS.load_local(index_path, embedding_model, allow_dangerous_deserialization=True)
     else:
         # Load documents and build vector store for first time
-        DOCS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "documents"))
+        DOCS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", settings.docs_dir))
         print(f"Loading folder from {DOCS_DIR}")
         docs = load_pdfs_from_folder(DOCS_DIR)
         print(f"Loaded {len(docs)} documents from {DOCS_DIR}")
@@ -69,6 +72,8 @@ def get_rag_chain():
 
         # Save the FAISS index for future use
         vectorstore.save_local(index_path)
+        print(f"Save the FAISS index for future use")
 
     retriever = vectorstore.as_retriever()
-    return RetrievalQA.from_chain_type(llm=Ollama(model="llama3.1:8b"), retriever=retriever)
+    llm=Ollama(model=settings.ollama_model)
+    return RetrievalQA.from_chain_type(llm=llm, retriever=retriever)
