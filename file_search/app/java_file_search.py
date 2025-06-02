@@ -2,7 +2,7 @@ import os
 
 class JavaFileSearch:
     
-    def test(self):
+    def search_file(self):
         directory_path = "C:\\Users\\eminy\\Documents"  # Replace this with your directory path
         search_string = "JavaFileSearch"  # The string you want to search for
         self.search_string(directory_path, search_string)
@@ -39,4 +39,4 @@ class JavaFileSearch:
 
 if __name__ == "__main__":
     java_file_search = JavaFileSearch()
-    java_file_search.test()
+    java_file_search.search_file()

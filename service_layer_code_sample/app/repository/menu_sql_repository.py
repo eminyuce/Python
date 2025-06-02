@@ -2,7 +2,7 @@
 import pyodbc
 import logging
 from datetime import datetime
-from app.models import Menu
+from app.models.models import Menu
 
 class MenuSqlRepository:
     

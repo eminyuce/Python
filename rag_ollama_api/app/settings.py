@@ -50,6 +50,8 @@ class Settings(BaseSettings):
 # --- Global Settings Instance ---
 # Using `lru_cache` ensures that the settings object is created only once
 # and reused across the application, improving performance.
+# lru_cache is a decorator that caches the results of a function so that when it is called with the same arguments, 
+# the cached result is returned.
 @lru_cache()
 def get_settings() -> Settings:
     """

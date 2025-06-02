@@ -4,12 +4,12 @@ import json
 import logging
 from io import StringIO
 
-from main_controller import MainController
-from number_service import NumberService
-from string_service import StringService
-from json_service import JsonService
-from menu_sql_repository import MenuSqlRepository
-from data_structure import DataStructure
+from service_layer_code_sample.app.controllers.main_controller import MainController
+from service_layer_code_sample.app.services.number_service import NumberService
+from service_layer_code_sample.string_service import StringService
+from service_layer_code_sample.json_service import JsonService
+from service_layer_code_sample.app.repository.menu_sql_repository import MenuSqlRepository
+from service_layer_code_sample.data_structure import DataStructure
 
 
 # Configure logging to capture logs for testing
