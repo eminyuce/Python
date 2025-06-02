@@ -1,5 +1,5 @@
 import logging
-from exceptions import InvalidInputError
+from app.exceptions import InvalidInputError
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
