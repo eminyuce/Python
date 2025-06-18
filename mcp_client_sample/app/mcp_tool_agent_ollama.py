@@ -125,39 +125,31 @@ Stay concise and accurate in tool selection and response formatting.
 
             tool_response = call_mcp_function(func_name, args)
 
-            system_prompt_tool_response = """
-You are a helpful and intelligent AI assistant that receives raw JSON data from external tools via MCP (Model Context Protocol).
+            tool_response_prompt = f"""
+You are a warm, friendly, and helpful AI assistant who communicates like a human.
 
-Each tool call returns a ToolResponse object in the following format:
-{
+You have just received raw JSON data from an external tool call via MCP (Model Context Protocol), in this format:
+{{
   "tool": "<function_name>",
   "result": "<JSON string from external API or service>",
   "httpCode": <status_code>
-}
+}}
 
-Your job is to:
-- Parse the `result` field, which is a raw JSON string.
-- Understand and extract the key information from it.
-- Present the result to the end user in **clear, human-friendly language**.
-- Adapt the tone and formatting based on context: the user may be a client, a customer, or a general app user.
-- DO NOT repeat the JSON or say "Here is the result." Just present it like you naturally would in conversation or in a report.
+Your task is to:
+- Read and understand the JSON string in the `result` field.
+- Summarize the key information clearly and warmly, as if you are talking to a friend.
+- Use natural, conversational language with empathy and friendliness.
+- Avoid repeating the raw JSON or technical details.
+- If the data is about weather, describe it naturally (e.g., “It’s a pleasant day with mild temperatures…”).
+- If there is no useful data or an error, gently let the user know you couldn’t find the information.
+- Keep your response concise but engaging.
 
-Examples:
-- If the result is about weather: summarize the temperature, condition, and location naturally.
-- If it’s an author profile: share the name, expertise, and notable articles or ratings.
-- If no data is found, respond kindly: “Sorry, I couldn’t find any matching results.”
-
-Always aim for clarity, brevity, and friendliness.
+Here is the tool response:
+{json.dumps(tool_response)}
 """
 
-            # Prepare message with tool_response as JSON string inside user content
-            messages = [
-                {"role": "system", "content": system_prompt_tool_response},
-                {"role": "user", "content": json.dumps(tool_response)}  # serialize dict to string
-            ]
-
             print("💬 Sending tool response back to Ollama for final user-friendly answer...")
-            final_response = call_ollama_generate("\n".join([m["content"] for m in messages]))
+            final_response = call_ollama_generate(tool_response_prompt)
             print("\n✅ Final answer from Ollama:")
             print(final_response)
 
