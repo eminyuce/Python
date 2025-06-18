@@ -13,6 +13,7 @@ OLLAMA_API_CHAT_URL = os.getenv("OLLAMA_API_CHAT_URL", "http://localhost:11434/a
 MCP_API_KEY = os.getenv("MCP_API_KEY")
 MCP_DISCOVERY_URL = os.getenv("MCP_DISCOVERY_URL")
 MCP_TOOL_CALL_URL = os.getenv("MCP_TOOL_CALL_URL")
+MCP_PROMPT_URL = os.getenv("MCP_PROMPT_URL")
 
 HEADERS = {
     "Content-Type": "application/json",
@@ -20,7 +21,19 @@ HEADERS = {
 if MCP_API_KEY:
     HEADERS["X-API-KEY"] = MCP_API_KEY
 
-# 📡 Step 1: Fetch available tool functions
+# 📡 Step 1: Fetch prompts from MCP and return as dict {name: content}
+def fetch_prompts_from_mcp():
+    try:
+        response = requests.get(MCP_PROMPT_URL, headers=HEADERS, timeout=5)
+        response.raise_for_status()
+    except requests.RequestException as e:
+        raise RuntimeError(f"❌ Error fetching MCP prompts: {str(e)}")
+
+    prompts = response.json()
+    prompt_dict = {p["name"]: p["content"] for p in prompts if "name" in p and "content" in p}
+    return prompt_dict
+    
+# 📡 Step 2: Fetch available tool definitions and format as string for prompt
 def fetch_function_definitions_from_mcp():
     try:
         response = requests.get(MCP_DISCOVERY_URL, headers=HEADERS, timeout=5)
@@ -29,21 +42,18 @@ def fetch_function_definitions_from_mcp():
         raise RuntimeError(f"❌ Error fetching MCP tools: {str(e)}")
 
     tools = response.json()
-    # Build a readable tool description block
     tool_info_text = ""
     for tool in tools:
         name = tool.get("name", "unknown")
         description = tool.get("description", "No description provided")
         schema = tool.get("inputSchema", "{}").replace("\r\n", "").replace("\n", "").strip()
-        
         tool_info_text += f"- {name}: {description}\n  Input schema: {schema}\n\n"
 
     print("📦 MCP Tools for system prompt:\n")
     print(tool_info_text)
-    
     return tool_info_text
 
-# ⚙️ Step 2: Call MCP Function
+# ⚙️ Step 3: Call MCP function with JSON args
 def call_mcp_function(function_name, arguments):
     try:
         payload = {
@@ -56,7 +66,7 @@ def call_mcp_function(function_name, arguments):
     except requests.RequestException as e:
         return {"error": f"❌ MCP Error: {str(e)}"}
 
-# 🧠 Step 3: Ask Ollama chat endpoint
+# 🧠 Step 4: Call Ollama chat endpoint with messages
 def call_ollama_chat(messages):
     response = requests.post(OLLAMA_API_CHAT_URL, json={
         "model": OLLAMA_MODEL,
@@ -66,7 +76,7 @@ def call_ollama_chat(messages):
     response.raise_for_status()
     return response.json()["message"]["content"]
 
-# For /api/generate endpoint, it expects "prompt" (string), not messages list
+# 🧠 Step 5: Call Ollama generate endpoint with prompt string
 def call_ollama_generate(prompt):
     response = requests.post(OLLAMA_API_GENERATE_URL, json={
         "model": OLLAMA_MODEL,
@@ -74,8 +84,8 @@ def call_ollama_generate(prompt):
         "stream": False
     })
     response.raise_for_status()
-    data = response.json()  # parse JSON response
-    return data.get("response", "")  # return the actual text response
+    data = response.json()
+    return data.get("response", "")
 
 # 🚀 Main agent flow
 def main():
@@ -83,30 +93,15 @@ def main():
     print("🔎 Fetching tool definitions from MCP server...")
     tool_info_text = fetch_function_definitions_from_mcp()
 
-    system_prompt = f"""
-You are a helpful and intelligent AI assistant.
+    print("🔎 Fetching prompts from MCP server...")
+    prompts_map = fetch_prompts_from_mcp()
 
-You have access to external tools via the Model Context Protocol (MCP). 
-To call a tool, respond with a **single line** in the following format:
-CALL <function_name> <JSON_arguments>
-
-Use this format exactly. Do **not** include extra text, explanation, or multiple calls.
-
-You may choose from the following available tools:
-
-{tool_info_text}
-
-Guidelines:
-- If you can answer the user's query directly using your own knowledge, do so.
-- If a tool is needed to fulfill the user's request, respond **only** with the CALL line.
-- Ensure the JSON arguments match the input schema for the tool.
-- If the tool requires no arguments, pass an empty object: `{{}}`.
-
-Example:
-CALL getWeather {{ "cityName": "Istanbul" }}
-
-Stay concise and accurate in tool selection and response formatting.
-"""
+    # Use dynamic system prompt from MCP prompts; fallback if not found
+    system_prompt_template = prompts_map.get("mcp-tool-prompt")
+    if system_prompt_template:
+        system_prompt = system_prompt_template.replace("[TOOL_INFO_TEXT]", tool_info_text)
+    else:
+        raise RuntimeError("❌ Required prompt 'mcp-tool-prompt' not found in MCP prompts")
 
     messages = [
         {"role": "system", "content": system_prompt},
@@ -125,28 +120,13 @@ Stay concise and accurate in tool selection and response formatting.
 
             tool_response = call_mcp_function(func_name, args)
 
-            tool_response_prompt = f"""
-You are a warm, friendly, and helpful AI assistant who communicates like a human.
-
-You have just received raw JSON data from an external tool call via MCP (Model Context Protocol), in this format:
-{{
-  "tool": "<function_name>",
-  "result": "<JSON string from external API or service>",
-  "httpCode": <status_code>
-}}
-
-Your task is to:
-- Read and understand the JSON string in the `result` field.
-- Summarize the key information clearly and warmly, as if you are talking to a friend.
-- Use natural, conversational language with empathy and friendliness.
-- Avoid repeating the raw JSON or technical details.
-- If the data is about weather, describe it naturally (e.g., “It’s a pleasant day with mild temperatures…”).
-- If there is no useful data or an error, gently let the user know you couldn’t find the information.
-- Keep your response concise but engaging.
-
-Here is the tool response:
-{json.dumps(tool_response)}
-"""
+            # Use final response prompt from MCP prompts; fallback if missing
+            final_response_prompt_template = prompts_map.get("final-response-prompt")
+            if final_response_prompt_template:
+                # Replace placeholder with serialized tool_response JSON string
+                tool_response_prompt = final_response_prompt_template.replace("[TOOL_RESPONSE]", json.dumps(tool_response))
+            else:
+                raise RuntimeError("❌ Required prompt 'final-response-prompt' not found in MCP prompts")
 
             print("💬 Sending tool response back to Ollama for final user-friendly answer...")
             final_response = call_ollama_generate(tool_response_prompt)
