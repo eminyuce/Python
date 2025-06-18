@@ -97,11 +97,11 @@ def main():
     prompts_map = fetch_prompts_from_mcp()
 
     # Use dynamic system prompt from MCP prompts; fallback if not found
-    system_prompt_template = prompts_map.get("mcp-tool-prompt")
+    system_prompt_template = prompts_map.get("unstructured-tool-system-prompt")
     if system_prompt_template:
         system_prompt = system_prompt_template.replace("[TOOL_INFO_TEXT]", tool_info_text)
     else:
-        raise RuntimeError("❌ Required prompt 'mcp-tool-prompt' not found in MCP prompts")
+        raise RuntimeError("❌ Required prompt 'unstructured-tool-system-prompt' not found in MCP prompts")
 
     messages = [
         {"role": "system", "content": system_prompt},
