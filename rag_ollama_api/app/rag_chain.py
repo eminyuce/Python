@@ -1,79 +1,97 @@
+import os
 from langchain.vectorstores import FAISS
 from langchain.embeddings import HuggingFaceEmbeddings
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.llms import Ollama 
 from langchain.chains import RetrievalQA
-from langchain.document_loaders import PyPDFLoader
-from app.pdf_loader import load_pdfs_from_folder
-from langchain_community.vectorstores import FAISS
-from langchain.embeddings import HuggingFaceEmbeddings
-from app.settings import get_settings, Settings # Assuming app/settings.py
-import os
+from langchain.llms import Ollama
+
+from app.settings import get_settings  # Settings loader from app/settings.py
+from app.pdf_loader import load_pdfs_from_folder  # Your PDF loader
 
 settings = get_settings()
 
+
+# -------------------------------
+# ✅ Utility: Embedding model setup
+# -------------------------------
+def get_embedding_model():
+    return HuggingFaceEmbeddings(
+        model_name=settings.embedding_model,
+        model_kwargs={"device": "cuda"}
+    )
+
+
+# -------------------------------
+# ✅ Vectorstore builder and saver
+# -------------------------------
 def build_vector_store(docs, embedding_model, index_path=settings.faiss_index_dir):
     print("Starting to build vector store...")
     index_file = os.path.join(index_path, "index.faiss")
-    
-    if not os.path.exists(index_file):
-        print(f"FAISS index file not found at {index_file}. Will build new index.")
-        if not docs:
-            raise ValueError("No documents found to build vector store.")
 
-        if not os.path.exists(index_path):
-            print(f"Creating index directory at {index_path}")
-            os.makedirs(index_path)
+    if not docs:
+        raise ValueError("No documents found to build vector store.")
 
-        splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
-        print("Splitting documents into chunks...")
-        chunks = splitter.split_documents(docs)
-        print(f"Split into {len(chunks)} chunks.")
+    if not os.path.exists(index_path):
+        os.makedirs(index_path)
+        print(f"Created index directory at {index_path}")
 
-        if not chunks:
-            raise ValueError("Text splitter produced no chunks. Check your documents.")
+    splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
+    print("Splitting documents into chunks...")
+    chunks = splitter.split_documents(docs)
+    print(f"Split into {len(chunks)} chunks.")
 
-        print("Starting embedding of chunks (this may take a while)...")
-        vectorstore = FAISS.from_documents(chunks, embedding_model)
-        print("Vector store built successfully!")
+    if not chunks:
+        raise ValueError("Text splitter produced no chunks. Check your documents.")
 
-        print(f"Saving vector store locally at {index_path} ...")
-        vectorstore.save_local(index_path)
-        print("Vector store saved successfully.")
-    else:
-        print(f"FAISS index file found at {index_file}. Loading existing index...")
-        vectorstore = FAISS.load_local(index_path, embedding_model, allow_dangerous_deserialization=True)
-        print("Vector store loaded successfully.")
+    print("Embedding chunks...")
+    vectorstore = FAISS.from_documents(chunks, embedding_model)
+
+    print(f"Saving FAISS index to {index_path} ...")
+    vectorstore.save_local(index_path)
+    print("Vector store saved successfully.")
 
     return vectorstore
 
 
+# -------------------------------
+# ✅ One-time index preparation (can be triggered manually or auto)
+# -------------------------------
+def prepare_faiss_index():
+    DOCS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", settings.docs_dir))
+    index_path = settings.faiss_index_dir
 
-def get_rag_chain():
-    index_path = "faiss_index"  # your folder path
-    embedding_model = HuggingFaceEmbeddings(
-            model_name=settings.embedding_model, #  "sentence-transformers/all-MiniLM-L6-v2",
-            model_kwargs={"device": "cuda"}
-        )
+    print(f"Loading documents from {DOCS_DIR}...")
+    docs = load_pdfs_from_folder(DOCS_DIR)
 
-    # Check if FAISS index exists
-    if os.path.exists(index_path) and os.path.exists(os.path.join(index_path, "index.faiss")):
-        # Load existing index safely
+    if not docs:
+        raise ValueError(f"No documents found in {DOCS_DIR}")
+
+    embedding_model = get_embedding_model()
+    return build_vector_store(docs, embedding_model, index_path)
+
+
+# -------------------------------
+# ✅ Load FAISS vectorstore, or auto-build if missing
+# -------------------------------
+def load_vectorstore():
+    index_path = settings.faiss_index_dir
+    index_file = os.path.join(index_path, "index.faiss")
+
+    if os.path.exists(index_file):
+        embedding_model = get_embedding_model()
+        print(f"Loading FAISS index from {index_path} ...")
         vectorstore = FAISS.load_local(index_path, embedding_model, allow_dangerous_deserialization=True)
+        print("Vector store loaded successfully.")
+        return vectorstore
     else:
-        # Load documents and build vector store for first time
-        DOCS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", settings.docs_dir))
-        print(f"Loading folder from {DOCS_DIR}")
-        docs = load_pdfs_from_folder(DOCS_DIR)
-        print(f"Loaded {len(docs)} documents from {DOCS_DIR}")
-        if len(docs) == 0:
-            raise ValueError(f"No documents loaded from {DOCS_DIR}. Please check the folder path and file contents.")
-        vectorstore = build_vector_store(docs, embedding_model)
+        print("FAISS index not found. Building it now...")
+        return prepare_faiss_index()
 
-        # Save the FAISS index for future use
-        vectorstore.save_local(index_path)
-        print(f"Save the FAISS index for future use")
-
+# -------------------------------
+# ✅ RAG Chain creation
+# -------------------------------
+def get_rag_chain():
+    vectorstore = load_vectorstore()
     retriever = vectorstore.as_retriever()
-    llm=Ollama(model=settings.ollama_model)
+    llm = Ollama(model=settings.ollama_model)
     return RetrievalQA.from_chain_type(llm=llm, retriever=retriever)
