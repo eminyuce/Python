@@ -9,7 +9,7 @@ llm = Ollama(
     base_url="http://localhost:11434",
     temperature=0.7,
 )
-
+print(llm.invoke("Which model are you?"))
 # Tool Definitions
 @tool("Search for available flights between cities")
 def search_flights_func(origin: str, destination: str, date: str) -> dict:
