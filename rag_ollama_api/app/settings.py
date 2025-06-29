@@ -38,7 +38,8 @@ class Settings(BaseSettings):
     # Directory where source documents are located
     docs_dir: str = Field("documents", env="DOCS_DIR",
                           description="Directory containing source documents for RAG.")
-
+    
+    pinecone_index: str = "mobilya1"
     # --- Pydantic Settings Configuration ---
     # `SettingsConfigDict` replaced `Config` in newer Pydantic versions
     model_config = SettingsConfigDict(
