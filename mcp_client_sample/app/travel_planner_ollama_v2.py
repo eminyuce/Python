@@ -1,11 +1,11 @@
 from crewai import Agent, Task, Crew, Process
 from crewai.tools import tool
 from textwrap import dedent
-from langchain_community.llms import Ollama
+from langchain_ollama import OllamaLLM as Ollama
 
 # Initialize LLM with Ollama
 llm = Ollama(
-    model="llama3.1:8b",
+    model="qwen2.5-coder:3b",  # or 7b, 1.5b, etc.
     base_url="http://localhost:11434",
     temperature=0.7,
 )
